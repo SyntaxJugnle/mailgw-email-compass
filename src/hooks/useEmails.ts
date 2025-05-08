@@ -135,6 +135,9 @@ export const useEmails = (autoRefresh = true, refreshInterval = 30000) => {
   
   // Set up auto-refresh
   useEffect(() => {
+    // Clear any existing refresh timer
+    cleanupTimer();
+    
     if (autoRefresh) {
       fetchEmails(true);
       
@@ -142,8 +145,6 @@ export const useEmails = (autoRefresh = true, refreshInterval = 30000) => {
       refreshTimerRef.current = window.setInterval(() => {
         fetchEmails(false);
       }, refreshInterval);
-    } else {
-      fetchEmails(true);
     }
     
     // Cleanup function

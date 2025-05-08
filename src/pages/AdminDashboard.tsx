@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import LoadingSpinner from "../components/LoadingSpinner";
+import EmailViewer from "../components/EmailViewer";
+import EmailList from "../components/EmailList";
+import { useEmails } from "../hooks/useEmails";
+import { authService } from "../services/auth";
+import { Eye, EyeOff } from "lucide-react";
 
 const generateRandomString = (length: number): string => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -30,7 +35,30 @@ const AdminDashboard: React.FC = () => {
   const { isAuthenticated, logout } = useAdminAuth();
   const { createAccount, loading } = useAccounts();
   const [accounts, setAccounts] = useState<GeneratedAccount[]>(accountsStorage.getAccounts());
-  
+  const [selectedAccount, setSelectedAccount] = useState<GeneratedAccount | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("create-account");
+
+  // Email viewing state
+  const {
+    emails,
+    loading: emailsLoading,
+    refreshing,
+    error,
+    selectedEmail,
+    getEmail,
+    deleteEmail,
+    refreshEmails,
+    setSelectedEmail
+  } = useEmails(activeTab === "view-emails");
+
+  useEffect(() => {
+    if (selectedAccount && activeTab === "view-emails") {
+      // Log in as the selected account to view emails
+      authService.login(selectedAccount.address, selectedAccount.password);
+      refreshEmails();
+    }
+  }, [selectedAccount, activeTab, refreshEmails]);
+
   // If not authenticated, redirect to admin login
   if (!isAuthenticated) {
     return <Navigate to="/admin" replace />;
@@ -100,11 +128,34 @@ const AdminDashboard: React.FC = () => {
   };
   
   const handleDeleteAccount = (id: string, address: string) => {
+    if (selectedAccount?.id === id) {
+      setSelectedAccount(null);
+    }
     accountsStorage.deleteAccount(id);
     refreshAccounts();
     toast.success(`Account ${address} removed from the list`);
   };
-  
+
+  const handleViewEmails = (account: GeneratedAccount) => {
+    setSelectedAccount(account);
+    setActiveTab("view-emails");
+  };
+
+  const handleBackToAccounts = () => {
+    setSelectedAccount(null);
+    setActiveTab("account-list");
+    // Logout of the account
+    authService.logout();
+  };
+
+  const handleEmailSelect = async (id: string) => {
+    await getEmail(id);
+  };
+
+  const handleDeleteEmailClick = async (id: string) => {
+    await deleteEmail(id);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-primary text-primary-foreground p-4">
@@ -120,10 +171,15 @@ const AdminDashboard: React.FC = () => {
       </header>
       
       <main className="container mx-auto py-6 px-4">
-        <Tabs defaultValue="create-account" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="create-account">Create Account</TabsTrigger>
             <TabsTrigger value="account-list">Account List</TabsTrigger>
+            {selectedAccount && (
+              <TabsTrigger value="view-emails">
+                Viewing: {selectedAccount.address}
+              </TabsTrigger>
+            )}
           </TabsList>
           
           <TabsContent value="create-account" className="p-6 bg-white rounded-md shadow">
@@ -195,18 +251,78 @@ const AdminDashboard: React.FC = () => {
                           {new Date(account.createdAt).toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          <Button 
-                            variant="destructive" 
-                            size="sm"
-                            onClick={() => handleDeleteAccount(account.id, account.address)}
-                          >
-                            Remove
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewEmails(account)}
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              View Emails
+                            </Button>
+                            <Button 
+                              variant="destructive" 
+                              size="sm"
+                              onClick={() => handleDeleteAccount(account.id, account.address)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="view-emails" className="bg-white rounded-md shadow">
+            {selectedAccount ? (
+              <div className="flex flex-col h-[calc(100vh-200px)]">
+                <div className="p-4 border-b flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      onClick={handleBackToAccounts}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Back to Accounts
+                    </Button>
+                    <h2 className="text-lg font-medium">
+                      Emails for: {selectedAccount.address}
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 h-full overflow-hidden">
+                  <EmailList 
+                    emails={emails}
+                    loading={emailsLoading}
+                    refreshing={refreshing}
+                    selectedEmailId={selectedEmail?.id || null}
+                    onRefresh={refreshEmails}
+                    onSelectEmail={handleEmailSelect}
+                    onDeleteEmail={handleDeleteEmailClick}
+                  />
+                  <EmailViewer
+                    email={selectedEmail}
+                    loading={emailsLoading}
+                    onDelete={handleDeleteEmailClick}
+                    onBack={() => setSelectedEmail(null)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="p-6">
+                <p className="text-gray-500">No account selected. Please select an account from the Account List tab.</p>
+                <Button 
+                  onClick={() => setActiveTab("account-list")}
+                  variant="outline"
+                  className="mt-4"
+                >
+                  Go to Account List
+                </Button>
               </div>
             )}
           </TabsContent>
