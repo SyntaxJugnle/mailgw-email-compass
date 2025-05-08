@@ -1,9 +1,10 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAccounts } from "../hooks/useAccounts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LoadingSpinner from "./LoadingSpinner";
 import { toast } from "sonner";
 
@@ -14,11 +15,34 @@ interface AccountFormProps {
 const AccountForm: React.FC<AccountFormProps> = ({ onSuccess }) => {
   const [address, setAddress] = useState<string>("");
   const [domain, setDomain] = useState<string>("mail.gw");
+  const [domains, setDomains] = useState<string[]>([]);
   const [password, setPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
   
   const { createAccount, loading, error } = useAccounts();
+  
+  // Fetch available domains from mail.gw API
+  useEffect(() => {
+    const fetchDomains = async () => {
+      try {
+        const response = await fetch("https://api.mail.gw/domains");
+        const data = await response.json();
+        
+        if (data["hydra:member"] && data["hydra:member"].length > 0) {
+          const availableDomains = data["hydra:member"].map((item: any) => item.domain);
+          setDomains(availableDomains);
+          setDomain(availableDomains[0] || "");
+        }
+      } catch (err) {
+        console.error("Error fetching domains:", err);
+        // Fallback domains in case API fails
+        setDomains(["mail.gw", "mailgw.com", "mailinator.com"]);
+      }
+    };
+    
+    fetchDomains();
+  }, []);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,9 +95,18 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSuccess }) => {
             onChange={(e) => setAddress(e.target.value)}
             className="rounded-r-none"
           />
-          <span className="inline-flex items-center px-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md text-gray-500">
-            @{domain}
-          </span>
+          <div className="inline-flex w-full max-w-[180px]">
+            <Select value={domain} onValueChange={setDomain}>
+              <SelectTrigger className="rounded-l-none">
+                <SelectValue placeholder="Select domain" />
+              </SelectTrigger>
+              <SelectContent>
+                {domains.map((d) => (
+                  <SelectItem key={d} value={d}>@{d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
       
