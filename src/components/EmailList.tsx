@@ -41,7 +41,9 @@ const EmailList: React.FC<EmailListProps> = ({
       <div className="p-4 border-b flex justify-between items-center">
         <h2 className="text-lg font-medium">Inbox</h2>
         <button
-          className="text-sm flex items-center gap-1 text-primary hover:text-primary/80"
+          className={`text-sm flex items-center gap-1 ${
+            rateLimited ? "text-gray-400" : "text-primary hover:text-primary/80"
+          }`}
           onClick={handleRefreshClick}
           disabled={refreshing || rateLimited}
         >

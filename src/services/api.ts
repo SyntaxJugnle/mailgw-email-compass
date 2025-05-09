@@ -89,8 +89,8 @@ export interface EmailResponse {
   isDeleted: boolean;
   retention: boolean;
   retentionDate: string;
-  text: string;
-  html: string;
+  text: string | null;
+  html: string | null;
   hasAttachments: boolean;
   attachments: any[];
   size: number;
@@ -244,8 +244,11 @@ export const createApiClient = (token?: string) => {
           id: email.id,
           from: email.from,
           to: email.to,
-          subject: email.subject,
-          intro: email.text.substring(0, 100) + (email.text.length > 100 ? '...' : ''),
+          subject: email.subject || "(No Subject)",
+          // Fix for the null/undefined text property
+          intro: email.text 
+            ? email.text.substring(0, 100) + (email.text.length > 100 ? '...' : '') 
+            : "(No content)",
           isRead: email.seen,
           hasAttachments: email.hasAttachments,
           createdAt: email.createdAt,
