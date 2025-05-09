@@ -1,9 +1,10 @@
 
-import React from "react";
+import React, { useState } from "react";
 import { Email } from "../services/api";
 import LoadingSpinner from "./LoadingSpinner";
 import { format } from "date-fns";
-import { AlertCircle, RefreshCcw } from "lucide-react";
+import { AlertCircle, RefreshCcw, Search } from "lucide-react";
+import { Input } from "./ui/input";
 
 interface EmailListProps {
   emails: Email[];
@@ -26,6 +27,8 @@ const EmailList: React.FC<EmailListProps> = ({
   onDeleteEmail,
   rateLimited = false,
 }) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  
   const handleRefreshClick = (e: React.MouseEvent) => {
     e.preventDefault();
     onRefresh();
@@ -35,6 +38,23 @@ const EmailList: React.FC<EmailListProps> = ({
     e.stopPropagation();
     onDeleteEmail(id);
   };
+  
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+  
+  // Filter emails based on search query
+  const filteredEmails = emails.filter((email) => {
+    if (!searchQuery.trim()) return true;
+    
+    const query = searchQuery.toLowerCase();
+    return (
+      (email.subject && email.subject.toLowerCase().includes(query)) ||
+      (email.intro && email.intro.toLowerCase().includes(query)) ||
+      (email.from.name && email.from.name.toLowerCase().includes(query)) ||
+      (email.from.address && email.from.address.toLowerCase().includes(query))
+    );
+  });
 
   return (
     <div className="flex flex-col h-full border-r">
@@ -64,15 +84,28 @@ const EmailList: React.FC<EmailListProps> = ({
           <span className="text-sm">Rate limited by Mail.gw API. Please wait before refreshing.</span>
         </div>
       )}
+      
+      <div className="p-2 border-b">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            type="text"
+            placeholder="Search emails..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+            className="pl-8 w-full"
+          />
+        </div>
+      </div>
 
       <div className="flex-1 overflow-auto">
         {loading && !refreshing ? (
           <div className="flex items-center justify-center h-full">
             <LoadingSpinner size="lg" />
           </div>
-        ) : emails.length > 0 ? (
+        ) : filteredEmails.length > 0 ? (
           <ul className="divide-y">
-            {emails.map((email) => {
+            {filteredEmails.map((email) => {
               const isSelected = selectedEmailId === email.id;
               const formattedDate = format(
                 new Date(email.createdAt),
@@ -127,15 +160,30 @@ const EmailList: React.FC<EmailListProps> = ({
           </ul>
         ) : (
           <div className="p-8 text-center text-gray-500">
-            <p>No emails to display</p>
-            <p className="text-sm mt-2">
-              {rateLimited 
-                ? "API rate limited. Wait a moment and try again."
-                : "Emails will appear here once you receive them"}
-            </p>
+            {searchQuery ? (
+              <>
+                <p>No emails match your search</p>
+                <p className="text-sm mt-2">Try a different search term</p>
+              </>
+            ) : (
+              <>
+                <p>No emails to display</p>
+                <p className="text-sm mt-2">
+                  {rateLimited 
+                    ? "API rate limited. Wait a moment and try again."
+                    : "Emails will appear here once you receive them"}
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>
+      
+      {filteredEmails.length > 0 && searchQuery && (
+        <div className="p-2 border-t text-xs text-center text-gray-500">
+          {filteredEmails.length} {filteredEmails.length === 1 ? 'result' : 'results'} found
+        </div>
+      )}
     </div>
   );
 };
