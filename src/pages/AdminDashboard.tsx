@@ -48,7 +48,8 @@ const AdminDashboard: React.FC = () => {
     getEmail,
     deleteEmail,
     refreshEmails,
-    setSelectedEmail
+    setSelectedEmail,
+    rateLimited
   } = useEmails(activeTab === "view-emails");
 
   useEffect(() => {
@@ -304,6 +305,7 @@ const AdminDashboard: React.FC = () => {
                     onRefresh={refreshEmails}
                     onSelectEmail={handleEmailSelect}
                     onDeleteEmail={handleDeleteEmailClick}
+                    rateLimited={rateLimited}
                   />
                   <EmailViewer
                     email={selectedEmail}

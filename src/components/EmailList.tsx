@@ -3,6 +3,7 @@ import React from "react";
 import { Email } from "../services/api";
 import LoadingSpinner from "./LoadingSpinner";
 import { format } from "date-fns";
+import { AlertCircle } from "lucide-react";
 
 interface EmailListProps {
   emails: Email[];
@@ -12,6 +13,7 @@ interface EmailListProps {
   onRefresh: () => void;
   onSelectEmail: (id: string) => void;
   onDeleteEmail: (id: string) => void;
+  rateLimited?: boolean;
 }
 
 const EmailList: React.FC<EmailListProps> = ({
@@ -22,6 +24,7 @@ const EmailList: React.FC<EmailListProps> = ({
   onRefresh,
   onSelectEmail,
   onDeleteEmail,
+  rateLimited = false,
 }) => {
   const handleRefreshClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -40,7 +43,7 @@ const EmailList: React.FC<EmailListProps> = ({
         <button
           className="text-sm flex items-center gap-1 text-primary hover:text-primary/80"
           onClick={handleRefreshClick}
-          disabled={refreshing}
+          disabled={refreshing || rateLimited}
         >
           {refreshing ? (
             <LoadingSpinner size="sm" />
@@ -65,6 +68,13 @@ const EmailList: React.FC<EmailListProps> = ({
           )}
         </button>
       </div>
+      
+      {rateLimited && (
+        <div className="p-2 bg-amber-50 border-b border-amber-100 text-amber-800 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">Rate limited by Mail.gw API. Please wait before refreshing.</span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto">
         {loading && !refreshing ? (
@@ -130,7 +140,9 @@ const EmailList: React.FC<EmailListProps> = ({
           <div className="p-8 text-center text-gray-500">
             <p>No emails to display</p>
             <p className="text-sm mt-2">
-              Emails will appear here once you receive them
+              {rateLimited 
+                ? "API rate limited. Wait a moment and try again."
+                : "Emails will appear here once you receive them"}
             </p>
           </div>
         )}
