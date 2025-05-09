@@ -3,7 +3,7 @@ import React from "react";
 import { Email } from "../services/api";
 import LoadingSpinner from "./LoadingSpinner";
 import { format } from "date-fns";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, RefreshCcw } from "lucide-react";
 
 interface EmailListProps {
   emails: Email[];
@@ -51,20 +51,7 @@ const EmailList: React.FC<EmailListProps> = ({
             <LoadingSpinner size="sm" />
           ) : (
             <>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
+              <RefreshCcw className="h-4 w-4" />
               <span>Refresh</span>
             </>
           )}
@@ -102,7 +89,7 @@ const EmailList: React.FC<EmailListProps> = ({
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="font-medium truncate flex-1 mr-2">
-                      {email.from.name || email.from.address}
+                      {email.from.name || email.from.address || "Unknown Sender"}
                     </div>
                     <div className="text-xs text-gray-500 whitespace-nowrap">
                       {formattedDate}

@@ -1,14 +1,16 @@
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createApiClient, Email, EmailResponse } from "../services/api";
 import { authService } from "../services/auth";
 import { toast } from "sonner";
 
-// Constants for request management
+// Constants for request management - adjusting for stricter limits
 const MAX_RETRY_ATTEMPTS = 3;
-const INITIAL_RETRY_DELAY = 5000; // 5 seconds
-const MAX_REQUEST_INTERVAL = 30000; // 30 seconds
+const INITIAL_RETRY_DELAY = 10000; // 10 seconds
+const MAX_REQUEST_INTERVAL = 60000; // 60 seconds (1 minute)
+const MIN_REQUEST_INTERVAL = 5000; // 5 seconds between requests
 
-export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // Increased default interval to 60s
+export const useEmails = (autoRefresh = true, refreshInterval = 120000) => { // 2 minutes refresh interval
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -18,6 +20,7 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
   const refreshTimerRef = useRef<number | null>(null);
   const retryCountRef = useRef<number>(0);
   const lastRequestTimeRef = useRef<number>(0);
+  const failedRequestsRef = useRef<number>(0);
   
   // Clean up function for the refresh timer
   const cleanupTimer = () => {
@@ -33,7 +36,7 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
       INITIAL_RETRY_DELAY * Math.pow(2, retryCountRef.current),
       MAX_REQUEST_INTERVAL
     );
-    return backoff + Math.random() * 1000; // Add jitter
+    return backoff + Math.random() * 2000; // Add more jitter (up to 2s)
   };
   
   // Check if enough time has passed since last request
@@ -46,9 +49,16 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
       return timeSinceLastRequest >= getBackoffTime();
     }
     
-    // Otherwise, respect minimum interval of 2 seconds between requests
-    return timeSinceLastRequest >= 2000;
+    // More conservative timing - at least MIN_REQUEST_INTERVAL between requests
+    return timeSinceLastRequest >= MIN_REQUEST_INTERVAL;
   };
+  
+  // Reset rate limiting state after a successful request
+  const resetRateLimiting = useCallback(() => {
+    retryCountRef.current = 0;
+    failedRequestsRef.current = 0;
+    setRateLimited(false);
+  }, []);
   
   // Fetch emails
   const fetchEmails = useCallback(async (showLoading = true) => {
@@ -80,14 +90,16 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
       const data = await api.getEmails();
       
       // Reset retry counter on success
-      retryCountRef.current = 0;
-      setRateLimited(false);
+      resetRateLimiting();
       
       setEmails(data.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
     } catch (err: any) {
       console.error("Error fetching emails:", err);
+      
+      // Increment failed request counter
+      failedRequestsRef.current += 1;
       
       // Handle rate limiting specifically
       if (err.status === 429) {
@@ -103,8 +115,7 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
           setError("Rate limited. Try again later.");
           toast.error("Too many requests. Please wait a few minutes before trying again.");
         }
-      } else if (err.message && err.message.includes("CORS")) {
-        // CORS errors typically don't have status codes accessible from JS
+      } else if (err.message && typeof err.message === 'string' && err.message.includes("CORS")) {
         setError("CORS error: Cannot access emails directly from browser");
         toast.error("Cannot access emails due to CORS restrictions");
       } else {
@@ -114,11 +125,17 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
           toast.error("Failed to load emails");
         }
       }
+      
+      // If we've had multiple consecutive failures, increase backoff
+      if (failedRequestsRef.current > 3) {
+        setRateLimited(true);
+        retryCountRef.current = Math.min(retryCountRef.current + 1, MAX_RETRY_ATTEMPTS);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [resetRateLimiting]);
   
   // Get a specific email by ID
   const getEmail = useCallback(async (id: string) => {
@@ -147,8 +164,7 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
       setSelectedEmail(email);
       
       // Reset retry counter on success
-      retryCountRef.current = 0;
-      setRateLimited(false);
+      resetRateLimiting();
       
       // Mark as read if it's not already read
       if (!email.seen) {
@@ -168,6 +184,9 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
     } catch (err: any) {
       console.error("Error fetching email:", err);
       
+      // Increment failed request counter
+      failedRequestsRef.current += 1;
+      
       // Handle rate limiting specifically
       if (err.status === 429) {
         setRateLimited(true);
@@ -179,11 +198,17 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
         toast.error("Failed to load email content");
       }
       
+      // If we've had multiple consecutive failures, increase backoff
+      if (failedRequestsRef.current > 3) {
+        setRateLimited(true);
+        retryCountRef.current = Math.min(retryCountRef.current + 1, MAX_RETRY_ATTEMPTS);
+      }
+      
       return null;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [resetRateLimiting]);
   
   // Delete an email
   const deleteEmail = useCallback(async (id: string) => {
@@ -211,8 +236,7 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
       await api.deleteEmail(id);
       
       // Reset retry counter on success
-      retryCountRef.current = 0;
-      setRateLimited(false);
+      resetRateLimiting();
       
       // Remove the email from the list
       setEmails(prev => prev.filter(email => email.id !== id));
@@ -227,6 +251,9 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
     } catch (err: any) {
       console.error("Error deleting email:", err);
       
+      // Increment failed request counter
+      failedRequestsRef.current += 1;
+      
       // Handle rate limiting specifically
       if (err.status === 429) {
         setRateLimited(true);
@@ -238,11 +265,17 @@ export const useEmails = (autoRefresh = true, refreshInterval = 60000) => { // I
         toast.error("Failed to delete email");
       }
       
+      // If we've had multiple consecutive failures, increase backoff
+      if (failedRequestsRef.current > 3) {
+        setRateLimited(true);
+        retryCountRef.current = Math.min(retryCountRef.current + 1, MAX_RETRY_ATTEMPTS);
+      }
+      
       return false;
     } finally {
       setLoading(false);
     }
-  }, [selectedEmail]);
+  }, [selectedEmail, resetRateLimiting]);
   
   // Set up auto-refresh with respect to rate limiting and backoff
   useEffect(() => {

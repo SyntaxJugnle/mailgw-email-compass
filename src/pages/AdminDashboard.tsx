@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { useAdminAuth } from "../hooks/useAdminAuth";
@@ -31,14 +30,27 @@ const generateRandomString = (length: number): string => {
   return result;
 };
 
+// Modified debounce function to limit function invocation frequency
+const debounce = (fn: Function, ms = 1000) => {
+  let timer: number | null = null;
+  return (...args: any[]) => {
+    if (timer) clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      fn(...args);
+      timer = null;
+    }, ms);
+  };
+};
+
 const AdminDashboard: React.FC = () => {
   const { isAuthenticated, logout } = useAdminAuth();
   const { createAccount, loading } = useAccounts();
   const [accounts, setAccounts] = useState<GeneratedAccount[]>(accountsStorage.getAccounts());
   const [selectedAccount, setSelectedAccount] = useState<GeneratedAccount | null>(null);
   const [activeTab, setActiveTab] = useState<string>("create-account");
+  const [viewingEmails, setViewingEmails] = useState<boolean>(false);
 
-  // Email viewing state
+  // Email viewing state with reduced auto-refresh frequency
   const {
     emails,
     loading: emailsLoading,
@@ -50,13 +62,25 @@ const AdminDashboard: React.FC = () => {
     refreshEmails,
     setSelectedEmail,
     rateLimited
-  } = useEmails(activeTab === "view-emails");
+  } = useEmails(viewingEmails, 120000); // 2 minutes refresh interval
 
+  // Use effect to manage the email viewing state
   useEffect(() => {
+    setViewingEmails(activeTab === "view-emails" && !!selectedAccount);
+    
     if (selectedAccount && activeTab === "view-emails") {
       // Log in as the selected account to view emails
-      authService.login(selectedAccount.address, selectedAccount.password);
-      refreshEmails();
+      const doLogin = async () => {
+        try {
+          await authService.login(selectedAccount.address, selectedAccount.password);
+          // Use debounce to prevent rate limiting
+          debounce(refreshEmails, 2000)();
+        } catch (err) {
+          console.error("Error logging in:", err);
+          toast.error("Failed to login as the selected account");
+        }
+      };
+      doLogin();
     }
   }, [selectedAccount, activeTab, refreshEmails]);
 
@@ -145,16 +169,23 @@ const AdminDashboard: React.FC = () => {
   const handleBackToAccounts = () => {
     setSelectedAccount(null);
     setActiveTab("account-list");
+    setViewingEmails(false);
     // Logout of the account
     authService.logout();
   };
 
   const handleEmailSelect = async (id: string) => {
-    await getEmail(id);
+    // Use debounce to prevent rate limiting
+    debounce(async () => {
+      await getEmail(id);
+    }, 1000)();
   };
 
   const handleDeleteEmailClick = async (id: string) => {
-    await deleteEmail(id);
+    // Use debounce to prevent rate limiting
+    debounce(async () => {
+      await deleteEmail(id);
+    }, 1000)();
   };
 
   return (

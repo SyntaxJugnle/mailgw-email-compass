@@ -90,7 +90,8 @@ export interface EmailResponse {
   retention: boolean;
   retentionDate: string;
   text: string | null;
-  html: string | null;
+  html: string[] | null;
+  intro?: string; // Added based on API docs
   hasAttachments: boolean;
   attachments: any[];
   size: number;
@@ -242,13 +243,13 @@ export const createApiClient = (token?: string) => {
         
         return data["hydra:member"].map((email) => ({
           id: email.id,
-          from: email.from,
-          to: email.to,
+          from: email.from || { address: "unknown", name: "Unknown Sender" },
+          to: email.to || [{ address: "unknown", name: "Unknown Recipient" }],
           subject: email.subject || "(No Subject)",
-          // Fix for the null/undefined text property
-          intro: email.text 
-            ? email.text.substring(0, 100) + (email.text.length > 100 ? '...' : '') 
-            : "(No content)",
+          // The API documentation mentions that messages list includes 'intro', so preferentially use that
+          // Fall back to text only if intro is unavailable
+          intro: email.intro || 
+                (email.text ? email.text.substring(0, 100) + (email.text.length > 100 ? '...' : '') : "(No content)"),
           isRead: email.seen,
           hasAttachments: email.hasAttachments,
           createdAt: email.createdAt,
